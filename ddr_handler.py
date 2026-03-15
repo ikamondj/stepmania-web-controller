@@ -44,7 +44,10 @@ def initialize():
         if os.path.exists(CACHE_FILE):
             with open(CACHE_FILE, "r") as f:
                 cached_path = f.read().strip()
-                exe_path = os.path.join(cached_path, "Program", STEPMANIA_EXE_NAME)
+                if sys.platform in ["win32", "cygwin"]:
+                    exe_path = os.path.join(cached_path, "Program", STEPMANIA_EXE_NAME)
+                else:
+                    exe_path = os.path.join(cached_path, STEPMANIA_EXE_NAME)
                 if os.path.exists(exe_path):
                     STEPMANIA_ROOT_DIR = cached_path
                     logger.info(f"Using cached StepMania location: {STEPMANIA_ROOT_DIR}")
@@ -155,7 +158,7 @@ def download_and_extract(song_data, download_id=None, callback=None):
             callback({"status": "progress", "message": "Downloading..."})
         
         logger.info(f"Using songs directory: {STEPMANIA_SONGS_DIR}")
-        
+
         
         zip_filename = os.path.join(STEPMANIA_SONGS_DIR, f"{song_name}.zip")
         temp_extract_folder = os.path.join(STEPMANIA_SONGS_DIR, f"{song_name}_temp")
