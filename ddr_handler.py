@@ -143,6 +143,8 @@ def download_and_extract(song_data, download_id=None, callback=None):
         callback: Function to call with progress updates
     """
     global active_downloads
+    global STEPMANIA_SONGS_DIR
+    global STEPMANIA_ROOT_DIR
     
     if not song_data.get("simfile_id"):
         logger.error(f"Invalid simfile ID for {song_data.get('name')}")
