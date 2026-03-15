@@ -154,6 +154,9 @@ def download_and_extract(song_data, download_id=None, callback=None):
         if callback:
             callback({"status": "progress", "message": "Downloading..."})
         
+        logger.info(f"Using songs directory: {STEPMANIA_SONGS_DIR}")
+        
+        
         zip_filename = os.path.join(STEPMANIA_SONGS_DIR, f"{song_name}.zip")
         temp_extract_folder = os.path.join(STEPMANIA_SONGS_DIR, f"{song_name}_temp")
         final_extract_folder = os.path.join(STEPMANIA_SONGS_DIR, song_name)
