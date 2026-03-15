@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 CACHE_FILE = "StepManiaLocation.ikacache"
-STEPMANIA_EXE_NAME = "StepMania.exe"
+STEPMANIA_EXE_NAME = "StepMania.exe" if sys.platform in ["win32", "cygwin"] else "StepMania"
 STEPMANIA_ROOT_DIR = None
 STEPMANIA_SONGS_DIR = None
 
@@ -41,7 +41,20 @@ def initialize():
     
     try:
         # Check cache file
-        if os.path.exists(CACHE_FILE):
+        if sys.platform == "linux":
+            possible_paths = [
+                os.path.expanduser("~/stepmania"),
+                os.path.expanduser("~/StepMania"),
+                os.path.expanduser("~/Games/StepMania"),
+                os.path.expanduser("~/games/stepmania")
+            ]
+            for path in possible_paths:
+                exe_path = os.path.join(path, "Program", STEPMANIA_EXE_NAME)
+                if os.path.exists(exe_path):
+                    STEPMANIA_ROOT_DIR = path
+                    logger.info(f"Found StepMania at: {STEPMANIA_ROOT_DIR}")
+                    break
+        elif os.path.exists(CACHE_FILE):
             with open(CACHE_FILE, "r") as f:
                 cached_path = f.read().strip()
                 exe_path = os.path.join(cached_path, "Program", STEPMANIA_EXE_NAME)
