@@ -11,11 +11,38 @@ import time
 import logging
 import uuid
 import requests
-from pynput.keyboard import Controller, Key
+import sys
+import os
+
 from config import HOST, PORT, DEBUG, LOCAL_IP, BUTTON_A_KEY, BUTTON_B_KEY, KEY_PRESS_DURATION
 from config import MDNS_NAME, MDNS_DOMAIN, MDNS_FULL_NAME
 from config import BUTTON_LEFT_KEY, BUTTON_DOWN_KEY, BUTTON_UP_KEY, BUTTON_RIGHT_KEY
 import ddr_handler
+
+# Platform-specific keyboard handling
+IS_LINUX = sys.platform.startswith('linux')
+IS_WINDOWS = sys.platform == 'win32'
+
+if IS_WINDOWS:
+    from pynput.keyboard import Controller, Key
+    keyboard = Controller()
+elif IS_LINUX:
+    try:
+        import uinput
+        UINPUT_AVAILABLE = True
+        device = uinput.Device([
+            uinput.KEY_A, uinput.KEY_B,
+            uinput.KEY_LEFT, uinput.KEY_DOWN, uinput.KEY_UP, uinput.KEY_RIGHT
+        ])
+    except ImportError:
+        UINPUT_AVAILABLE = False
+        print("Warning: uinput not available. Install with: pip install python-uinput")
+        from pynput.keyboard import Controller, Key
+        keyboard = Controller()
+else:
+    # Fallback to pynput for macOS and other platforms
+    from pynput.keyboard import Controller, Key
+    keyboard = Controller()
 
 # Try to import zeroconf for mDNS support
 try:
@@ -37,9 +64,6 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'webHID-server-secret-key'
 socketio = SocketIO(app, cors_allowed_origins="*", ping_timeout=60, ping_interval=25)
 
-# Virtual keyboard controller
-keyboard = Controller()
-
 # Track active keys
 active_keys = set()
 key_lock = threading.Lock()
@@ -50,28 +74,38 @@ mdns_instance = None
 
 def get_key_from_name(button_name):
     """
-    Get the pynput Key object from button name
+    Get the key object from button name (works for both pynput and uinput)
     
     Args:
         button_name: 'A', 'B', 'Left', 'Down', 'Up', or 'Right'
     
     Returns:
-        pynput Key object or character
+        Key object or uinput key constant
     """
     button_name = button_name.upper()
-    if button_name == 'A':
-        return BUTTON_A_KEY
-    elif button_name == 'B':
-        return BUTTON_B_KEY
-    elif button_name == 'LEFT':
-        return Key.left if BUTTON_LEFT_KEY == 'left' else BUTTON_LEFT_KEY
-    elif button_name == 'DOWN':
-        return Key.down if BUTTON_DOWN_KEY == 'down' else BUTTON_DOWN_KEY
-    elif button_name == 'UP':
-        return Key.up if BUTTON_UP_KEY == 'up' else BUTTON_UP_KEY
-    elif button_name == 'RIGHT':
-        return Key.right if BUTTON_RIGHT_KEY == 'right' else BUTTON_RIGHT_KEY
-    return None
+    
+    if IS_LINUX and UINPUT_AVAILABLE:
+        # Map to uinput key constants
+        key_map = {
+            'A': uinput.KEY_A,
+            'B': uinput.KEY_B,
+            'LEFT': uinput.KEY_LEFT,
+            'DOWN': uinput.KEY_DOWN,
+            'UP': uinput.KEY_UP,
+            'RIGHT': uinput.KEY_RIGHT,
+        }
+    else:
+        # Map to pynput keys
+        key_map = {
+            'A': BUTTON_A_KEY,
+            'B': BUTTON_B_KEY,
+            'LEFT': Key.left if BUTTON_LEFT_KEY == 'left' else BUTTON_LEFT_KEY,
+            'DOWN': Key.down if BUTTON_DOWN_KEY == 'down' else BUTTON_DOWN_KEY,
+            'UP': Key.up if BUTTON_UP_KEY == 'up' else BUTTON_UP_KEY,
+            'RIGHT': Key.right if BUTTON_RIGHT_KEY == 'right' else BUTTON_RIGHT_KEY,
+        }
+    
+    return key_map.get(button_name, None)
 
 
 def press_button(button_name):
@@ -79,7 +113,7 @@ def press_button(button_name):
     Press a virtual button
     
     Args:
-        button_name: 'A' or 'B'
+        button_name: 'A', 'B', 'Left', 'Down', 'Up', or 'Right'
     """
     key = get_key_from_name(button_name)
     if key is None:
@@ -88,7 +122,12 @@ def press_button(button_name):
     
     with key_lock:
         try:
-            keyboard.press(key)
+            if IS_LINUX and UINPUT_AVAILABLE:
+                device.emit_click(key)
+                # For sustained press, emit key down event
+                device.emit((uinput.EV_KEY, key, 1))
+            else:
+                keyboard.press(key)
             active_keys.add((button_name, key))
             logger.info(f"Button {button_name} pressed")
         except Exception as e:
@@ -100,7 +139,7 @@ def release_button(button_name):
     Release a virtual button
     
     Args:
-        button_name: 'A' or 'B'
+        button_name: 'A', 'B', 'Left', 'Down', 'Up', or 'Right'
     """
     key = get_key_from_name(button_name)
     if key is None:
@@ -109,7 +148,11 @@ def release_button(button_name):
     
     with key_lock:
         try:
-            keyboard.release(key)
+            if IS_LINUX and UINPUT_AVAILABLE:
+                # Emit key up event
+                device.emit((uinput.EV_KEY, key, 0))
+            else:
+                keyboard.release(key)
             active_keys.discard((button_name, key))
             logger.info(f"Button {button_name} released")
         except Exception as e:
@@ -369,7 +412,10 @@ def release_all_buttons():
     with key_lock:
         for button_name, key in list(active_keys):
             try:
-                keyboard.release(key)
+                if IS_LINUX and UINPUT_AVAILABLE:
+                    device.emit((uinput.EV_KEY, key, 0))
+                else:
+                    keyboard.release(key)
                 logger.info(f"Released button {button_name} during cleanup")
             except Exception as e:
                 logger.error(f"Error releasing button {button_name}: {e}")
