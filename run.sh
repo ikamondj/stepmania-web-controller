@@ -7,6 +7,14 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR" || exit 1
 
+if [ -z "${DISPLAY:-}" ]; then
+    export DISPLAY=:0
+fi
+
+if [ -z "${XAUTHORITY:-}" ] && [ -f "$HOME/.Xauthority" ]; then
+    export XAUTHORITY="$HOME/.Xauthority"
+fi
+
 echo
 echo "============================================================"
 echo "       WebHID Server - Setup and Run Script"
