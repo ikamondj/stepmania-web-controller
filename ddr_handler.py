@@ -59,7 +59,7 @@ def initialize():
             return False
         
         if STEPMANIA_ROOT_DIR is None:
-            STEPMANIA_ROOT_DIR = os.path.expanduser('~/stepmania')
+            STEPMANIA_ROOT_DIR = '/home/pi/stepmania'
         
         # Set songs directory
         STEPMANIA_SONGS_DIR = os.path.join(STEPMANIA_ROOT_DIR, "Songs", "AutoDownloaded")
@@ -164,7 +164,7 @@ def download_and_extract(song_data, download_id=None, callback=None):
 
         if (STEPMANIA_SONGS_DIR is None):
             if STEPMANIA_ROOT_DIR is None:
-                STEPMANIA_ROOT_DIR = os.path.expanduser('~/stepmania')
+                STEPMANIA_ROOT_DIR = '/home/pi/stepmania'
             STEPMANIA_SONGS_DIR = os.path.join(STEPMANIA_ROOT_DIR, "Songs", "AutoDownloaded")
         
         logger.info(f"Using songs directory: {STEPMANIA_SONGS_DIR}")
