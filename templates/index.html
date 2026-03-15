@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebHID Controller</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Main Control Page -->
+        <div id="controlPage" class="page">
+            <div class="header">
+                <h1>WebHID Controller</h1>
+                <div class="status-info">
+                    <div class="status-row">
+                        <div class="status-text">
+                            <p>Server IP: <span id="server-ip">{{ server_ip }}</span></p>
+                            <p>Port: <span id="server-port">{{ server_port }}</span></p>
+                            <p>Status: <span id="connection-status" class="status-disconnected">Disconnected</span></p>
+                        </div>
+                        <button id="ddrButton" class="ddr-icon-button" title="DDR Downloader">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="button-container">
+                <!-- Button A (Green) - Top -->
+                <button class="control-button button-a" id="buttonA" data-button="A">
+                    <span class="button-label">Button A</span>
+                </button>
+                
+                <!-- Button B (Red) - Bottom -->
+                <button class="control-button button-b" id="buttonB" data-button="B">
+                    <span class="button-label">Button B</span>
+                </button>
+            </div>
+            
+            <div class="footer">
+                <p>Device: <span id="device-name">WebHID Server</span></p>
+                <p class="connection-time">Connected for: <span id="connection-time">0s</span></p>
+            </div>
+        </div>
+
+        <!-- DDR Downloader Page -->
+        <div id="ddrPage" class="page hidden">
+            <div class="header">
+                <div class="header-top">
+                    <button id="backButton" class="back-button" title="Back to Controller">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 12H5M12 19l-7-7 7-7"/>
+                        </svg>
+                    </button>
+                    <h1>StepMania Downloader</h1>
+                    <div style="width: 40px;"></div>
+                </div>
+            </div>
+            
+            <div class="ddr-container">
+                <div class="search-panel">
+                    <h2>Search Songs</h2>
+                    <div class="search-input-group">
+                        <input type="text" id="songTitle" placeholder="Song Title (optional)" class="search-input">
+                        <input type="text" id="songArtist" placeholder="Artist (optional)" class="search-input">
+                        <button id="searchButton" class="search-button" disabled>Search</button>
+                        <p class="search-hint">Enter at least one field to search</p>
+                    </div>
+                    <div id="searchStatus" class="search-status"></div>
+                </div>
+                
+                <div class="results-panel">
+                    <h2>Results</h2>
+                    <div id="resultsList" class="results-list">
+                        <p class="placeholder">Enter search terms and click Search</p>
+                    </div>
+                    <div class="pagination-controls">
+                        <button id="prevPageBtn" class="pagination-btn" disabled>← Previous</button>
+                        <span id="pageInfo" class="page-info">Page 1</span>
+                        <button id="nextPageBtn" class="pagination-btn" disabled>Next →</button>
+                    </div>
+                </div>
+                
+                <div id="downloadStatus" class="download-status hidden">
+                    <p id="downloadMessage"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
