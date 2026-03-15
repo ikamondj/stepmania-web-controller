@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 CACHE_FILE = "StepManiaLocation.ikacache"
-STEPMANIA_EXE_NAME = "StepMania.exe" if sys.platform in ["win32", "cygwin"] else "StepMania"
+STEPMANIA_EXE_NAME = "StepMania.exe" if sys.platform in ["win32", "cygwin"] else "stepmania"
 STEPMANIA_ROOT_DIR = None
 STEPMANIA_SONGS_DIR = None
 
@@ -57,6 +57,9 @@ def initialize():
         else:
             logger.error("StepManiaLocation.ikacache file not found")
             return False
+        
+        if STEPMANIA_ROOT_DIR is None:
+            STEPMANIA_ROOT_DIR = os.path.expanduser('~/stepmania')
         
         # Set songs directory
         STEPMANIA_SONGS_DIR = os.path.join(STEPMANIA_ROOT_DIR, "Songs", "AutoDownloaded")
