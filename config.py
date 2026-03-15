@@ -30,6 +30,10 @@ MDNS_FULL_NAME = f"{MDNS_NAME}.{MDNS_DOMAIN}"
 # Virtual button configuration
 BUTTON_A_KEY = "a"  # Key to press/release for button A
 BUTTON_B_KEY = "b"  # Key to press/release for button B
+BUTTON_LEFT_KEY = "left"  # Directional: Left
+BUTTON_DOWN_KEY = "down"  # Directional: Down
+BUTTON_UP_KEY = "up"  # Directional: Up
+BUTTON_RIGHT_KEY = "right"  # Directional: Right
 
 # Time in seconds to hold key on press
 KEY_PRESS_DURATION = 0.1

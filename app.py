@@ -14,6 +14,7 @@ import requests
 from pynput.keyboard import Controller, Key
 from config import HOST, PORT, DEBUG, LOCAL_IP, BUTTON_A_KEY, BUTTON_B_KEY, KEY_PRESS_DURATION
 from config import MDNS_NAME, MDNS_DOMAIN, MDNS_FULL_NAME
+from config import BUTTON_LEFT_KEY, BUTTON_DOWN_KEY, BUTTON_UP_KEY, BUTTON_RIGHT_KEY
 import ddr_handler
 
 # Try to import zeroconf for mDNS support
@@ -52,7 +53,7 @@ def get_key_from_name(button_name):
     Get the pynput Key object from button name
     
     Args:
-        button_name: 'A' or 'B'
+        button_name: 'A', 'B', 'Left', 'Down', 'Up', or 'Right'
     
     Returns:
         pynput Key object or character
@@ -62,6 +63,14 @@ def get_key_from_name(button_name):
         return BUTTON_A_KEY
     elif button_name == 'B':
         return BUTTON_B_KEY
+    elif button_name == 'LEFT':
+        return Key.left if BUTTON_LEFT_KEY == 'left' else BUTTON_LEFT_KEY
+    elif button_name == 'DOWN':
+        return Key.down if BUTTON_DOWN_KEY == 'down' else BUTTON_DOWN_KEY
+    elif button_name == 'UP':
+        return Key.up if BUTTON_UP_KEY == 'up' else BUTTON_UP_KEY
+    elif button_name == 'RIGHT':
+        return Key.right if BUTTON_RIGHT_KEY == 'right' else BUTTON_RIGHT_KEY
     return None
 
 
@@ -271,7 +280,8 @@ def handle_button_event(data):
     timestamp = data.get('timestamp', None)
     client_ip = request.remote_addr
     
-    if button not in ['A', 'B']:
+    valid_buttons = ['A', 'B', 'LEFT', 'DOWN', 'UP', 'RIGHT']
+    if button not in valid_buttons:
         logger.warning(f"Invalid button: {button}")
         emit('button_response', {'status': 'error', 'message': 'Invalid button'})
         return

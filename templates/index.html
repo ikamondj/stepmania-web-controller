@@ -40,6 +40,22 @@
                 <button class="control-button button-b" id="buttonB" data-button="B">
                     <span class="button-label">Button B</span>
                 </button>
+                
+                <!-- Directional Buttons -->
+                <div class="directional-container">
+                    <button class="directional-button directional-left" id="buttonLeft" data-button="Left" title="Left">
+                        <img src="{{ url_for('static', filename='left.png') }}" alt="Left">
+                    </button>
+                    <button class="directional-button directional-down" id="buttonDown" data-button="Down" title="Down">
+                        <img src="{{ url_for('static', filename='down.png') }}" alt="Down">
+                    </button>
+                    <button class="directional-button directional-up" id="buttonUp" data-button="Up" title="Up">
+                        <img src="{{ url_for('static', filename='up.png') }}" alt="Up">
+                    </button>
+                    <button class="directional-button directional-right" id="buttonRight" data-button="Right" title="Right">
+                        <img src="{{ url_for('static', filename='right.png') }}" alt="Right">
+                    </button>
+                </div>
             </div>
             
             <div class="footer">

@@ -456,6 +456,47 @@ function initializeButtons() {
         sendButtonEvent('B', 'release');
     });
 
+    // Directional buttons
+    const buttonLeft = document.getElementById('buttonLeft');
+    const buttonDown = document.getElementById('buttonDown');
+    const buttonUp = document.getElementById('buttonUp');
+    const buttonRight = document.getElementById('buttonRight');
+
+    // Helper function to add directional button listeners
+    const addDirectionalButtonListeners = (button, direction) => {
+        button.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            sendButtonEvent(direction, 'press');
+        });
+
+        button.addEventListener('mouseup', (e) => {
+            e.preventDefault();
+            sendButtonEvent(direction, 'release');
+        });
+
+        button.addEventListener('mouseleave', (e) => {
+            if (e.buttons === 1) {
+                sendButtonEvent(direction, 'release');
+            }
+        });
+
+        button.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            sendButtonEvent(direction, 'press');
+        });
+
+        button.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            sendButtonEvent(direction, 'release');
+        });
+    };
+
+    // Add listeners for each directional button
+    addDirectionalButtonListeners(buttonLeft, 'Left');
+    addDirectionalButtonListeners(buttonDown, 'Down');
+    addDirectionalButtonListeners(buttonUp, 'Up');
+    addDirectionalButtonListeners(buttonRight, 'Right');
+
     // Prevent default touch behaviors
     document.addEventListener('touchmove', (e) => {
         if (e.touches.length === 1) {

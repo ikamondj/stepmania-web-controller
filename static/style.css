@@ -61,7 +61,6 @@ body {
 }
 
 .control-button {
-    flex: 1;
     border: none;
     font-size: 32px;
     font-weight: bold;
@@ -76,6 +75,12 @@ body {
     overflow: hidden;
     color: white;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Reduce height of A and B buttons to accommodate directional buttons */
+.button-a,
+.button-b {
+    flex: 0 0 calc((100vh - 420px) / 2);
 }
 
 .control-button:active {
@@ -135,6 +140,60 @@ body {
     z-index: 1;
     position: relative;
     font-size: 48px;
+}
+
+/* Directional Buttons Container */
+.directional-container {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    padding: 10px;
+    background: #f5f5f5;
+    flex: 0 0 auto;
+}
+
+/* Directional Button Base Styles */
+.directional-button {
+    aspect-ratio: 1 / 1;
+    border: 2px solid rgba(0, 0, 0, 0.15);
+    cursor: pointer;
+    transition: all 0.1s ease;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    outline: none;
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, #5a7c9c 0%, #4a6fa5 100%);
+    border-radius: 4px;
+    padding: 0;
+}
+
+.directional-button img {
+    width: 50%;
+    height: 50%;
+    object-fit: contain;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
+    z-index: 1;
+    position: relative;
+}
+
+.directional-button:hover {
+    background: linear-gradient(135deg, #6b8db0 0%, #5b80b6 100%);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.directional-button:active {
+    transform: scale(0.95);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2) inset;
+}
+
+.directional-left,
+.directional-down,
+.directional-up,
+.directional-right {
+    /* Same bluish unsaturated color */
 }
 
 .footer {
