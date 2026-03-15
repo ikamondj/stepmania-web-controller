@@ -5,4 +5,4 @@ python-engineio==4.7.1
 pynput==1.7.6
 zeroconf==0.68.0
 requests==2.31.0
-python-uinput==0.11.2  # Linux only: for virtual input simulation
+python-uinput==0.11.2; sys_platform == "linux"
