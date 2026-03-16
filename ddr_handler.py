@@ -100,10 +100,11 @@ def get_stepmania_executable_path():
     if not candidate_root:
         return None
 
+
     executable_path = (
         os.path.join(candidate_root, "Program", STEPMANIA_EXE_NAME)
         if sys.platform in ["win32", "cygwin"]
-        else os.path.join(candidate_root, STEPMANIA_EXE_NAME)
+        else '/home/pi/stepmania/stepmania'
     )
 
     if os.path.exists(executable_path):
