@@ -167,24 +167,31 @@ def open_stepmania():
     """
     Launch StepMania without tying the child process lifecycle to this server.
     """
-    executable_path = get_stepmania_executable_path()
-    if not executable_path:
-        raise FileNotFoundError("StepMania executable could not be found from the cached install path")
-
-    launch_kwargs = {
-        "cwd": STEPMANIA_ROOT_DIR or os.path.dirname(executable_path),
-        "stdin": subprocess.DEVNULL,
-        "stdout": subprocess.DEVNULL,
-        "stderr": subprocess.DEVNULL,
-    }
+    
 
     if sys.platform in ["win32", "cygwin"]:
+        executable_path = get_stepmania_executable_path()
+        if not executable_path:
+            raise FileNotFoundError("StepMania executable could not be found from the cached install path")
+
+        launch_kwargs = {
+            "cwd": STEPMANIA_ROOT_DIR or os.path.dirname(executable_path),
+            "stdin": subprocess.DEVNULL,
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+        }
         creationflags = (
             getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
             | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
         )
         subprocess.Popen([executable_path], creationflags=creationflags, **launch_kwargs)
     else:
+        launch_kwargs = {
+            "cwd": '/home/pi/stepmania',
+            "stdin": subprocess.DEVNULL,
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+        }
         subprocess.Popen(['/home/pi/stepmania/stepmania'], start_new_session=True, **launch_kwargs)
 
     logger.info(f"Launched StepMania from {executable_path}")
