@@ -186,13 +186,14 @@ def open_stepmania():
         )
         subprocess.Popen([executable_path], creationflags=creationflags, **launch_kwargs)
     else:
+        executable_path = '/home/pi/stepmania/stepmania'
         launch_kwargs = {
             "cwd": '/home/pi/stepmania',
             "stdin": subprocess.DEVNULL,
             "stdout": subprocess.DEVNULL,
             "stderr": subprocess.DEVNULL,
         }
-        subprocess.Popen(['/home/pi/stepmania/stepmania'], start_new_session=True, **launch_kwargs)
+        subprocess.Popen([executable_path], start_new_session=True, **launch_kwargs)
 
     logger.info(f"Launched StepMania from {executable_path}")
 
