@@ -670,6 +670,9 @@ body {
     border-radius: 8px;
     text-align: center;
     font-weight: 600;
+    margin: 12px auto 0;
+    width: min(100%, 640px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
 }
 
 .download-status.hidden {
@@ -683,6 +686,7 @@ body {
 #downloadMessage {
     margin: 0;
     font-size: 14px;
+    line-height: 1.4;
 }
 
 /* Pagination Controls */
