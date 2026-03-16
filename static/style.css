@@ -779,6 +779,12 @@ body {
     background: #555;
 }
 
+@media (max-width: 768px) {
+    .results-panel {
+        min-height: 600px;
+    }
+}
+
 /* Mobile Adjustments */
 @media (max-height: 600px) {
     .ddr-container {
