@@ -334,6 +334,13 @@ body {
     flex: 1;
 }
 
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
 /* DDR Icon Button */
 .ddr-icon-button {
     background: rgba(255, 255, 255, 0.2);
@@ -411,6 +418,77 @@ body {
     padding: 15px;
     gap: 15px;
     overflow-y: auto;
+}
+
+.stepmania-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.stepmania-panel {
+    width: min(100%, 520px);
+    background: white;
+    border-radius: 16px;
+    padding: 28px 24px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    text-align: center;
+}
+
+.stepmania-panel h2 {
+    font-size: 22px;
+    color: #333;
+    margin-bottom: 12px;
+}
+
+.stepmania-status-text {
+    font-size: 15px;
+    color: #666;
+    margin-bottom: 20px;
+    min-height: 24px;
+    line-height: 1.5;
+}
+
+.stepmania-toggle-button {
+    width: 100%;
+    border: none;
+    border-radius: 12px;
+    padding: 18px 20px;
+    color: white;
+    font-size: 20px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+    background: linear-gradient(135deg, #00c853 0%, #00b020 100%);
+    box-shadow: 0 10px 20px rgba(0, 200, 83, 0.22);
+}
+
+.stepmania-toggle-button.is-running {
+    background: linear-gradient(135deg, #ff7043 0%, #e53935 100%);
+    box-shadow: 0 10px 20px rgba(229, 57, 53, 0.22);
+}
+
+.stepmania-toggle-button:hover:not(:disabled) {
+    transform: translateY(-2px);
+}
+
+.stepmania-toggle-button:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.stepmania-toggle-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
+    box-shadow: none;
+}
+
+.stepmania-hint {
+    margin-top: 16px;
+    font-size: 13px;
+    color: #8a8a8a;
+    line-height: 1.5;
 }
 
 /* Search Panel */
@@ -720,6 +798,19 @@ body {
 
     .result-item {
         padding: 8px;
+    }
+
+    .stepmania-container {
+        padding: 12px;
+    }
+
+    .stepmania-panel {
+        padding: 20px 16px;
+    }
+
+    .stepmania-toggle-button {
+        font-size: 18px;
+        padding: 16px;
     }
 }
 

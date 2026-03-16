@@ -19,13 +19,22 @@
                             <p>Port: <span id="server-port">{{ server_port }}</span></p>
                             <p>Status: <span id="connection-status" class="status-disconnected">Disconnected</span></p>
                         </div>
-                        <button id="ddrButton" class="ddr-icon-button" title="DDR Downloader">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                <polyline points="7 10 12 15 17 10"></polyline>
-                                <line x1="12" y1="15" x2="12" y2="3"></line>
-                            </svg>
-                        </button>
+                        <div class="header-actions">
+                            <button id="stepmaniaButton" class="ddr-icon-button" title="StepMania Controls">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M4 21h16"></path>
+                                    <path d="M5 21V8l7-5 7 5v13"></path>
+                                    <path d="M10 21v-6h4v6"></path>
+                                </svg>
+                            </button>
+                            <button id="ddrButton" class="ddr-icon-button" title="DDR Downloader">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="7 10 12 15 17 10"></polyline>
+                                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -104,6 +113,34 @@
                 
                 <div id="downloadStatus" class="download-status hidden">
                     <p id="downloadMessage"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- StepMania Control Page -->
+        <div id="stepmaniaPage" class="page hidden">
+            <div class="header">
+                <div class="header-top">
+                    <button id="stepmaniaBackButton" class="back-button" title="Back to Controller">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 12H5M12 19l-7-7 7-7"/>
+                        </svg>
+                    </button>
+                    <h1>StepMania Control</h1>
+                    <div style="width: 40px;"></div>
+                </div>
+            </div>
+
+            <div class="stepmania-container">
+                <div class="stepmania-panel">
+                    <h2>Manage StepMania</h2>
+                    <p id="stepmaniaStatusText" class="stepmania-status-text">Waiting for server status...</p>
+                    <button id="stepmaniaToggleButton" class="stepmania-toggle-button" disabled>
+                        Checking StepMania...
+                    </button>
+                    <p class="stepmania-hint">
+                        This page reflects the server's current StepMania process state.
+                    </p>
                 </div>
             </div>
         </div>

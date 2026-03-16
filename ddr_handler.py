@@ -13,6 +13,7 @@ import requests
 import xml.etree.ElementTree as ET
 import threading
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,167 @@ def initialize():
     except Exception as e:
         logger.error(f"Failed to initialize DDR handler: {e}")
         return False
+
+
+def get_stepmania_executable_path():
+    """
+    Resolve the StepMania executable path from the cached install location.
+
+    Returns:
+        Absolute path to the StepMania executable, or None if unavailable
+    """
+    global STEPMANIA_ROOT_DIR
+
+    candidate_root = STEPMANIA_ROOT_DIR
+
+    if not candidate_root and os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, "r") as f:
+                candidate_root = f.read().strip()
+        except Exception as e:
+            logger.error(f"Failed to read StepMania cache file: {e}")
+            return None
+
+    if not candidate_root and sys.platform not in ["win32", "cygwin"]:
+        candidate_root = "/home/pi/stepmania"
+
+    if not candidate_root:
+        return None
+
+    executable_path = (
+        os.path.join(candidate_root, "Program", STEPMANIA_EXE_NAME)
+        if sys.platform in ["win32", "cygwin"]
+        else os.path.join(candidate_root, STEPMANIA_EXE_NAME)
+    )
+
+    if os.path.exists(executable_path):
+        STEPMANIA_ROOT_DIR = candidate_root
+        return executable_path
+
+    return None
+
+
+def is_stepmania_available():
+    """Whether the StepMania executable can be resolved from the cached install location."""
+    return get_stepmania_executable_path() is not None
+
+
+def is_stepmania_running():
+    """
+    Check whether StepMania is currently running.
+
+    Returns:
+        True if the process is running, otherwise False
+    """
+    try:
+        if sys.platform in ["win32", "cygwin"]:
+            result = subprocess.run(
+                ["tasklist", "/FI", f"IMAGENAME eq {STEPMANIA_EXE_NAME}"],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            output = f"{result.stdout}\n{result.stderr}".lower()
+            return STEPMANIA_EXE_NAME.lower() in output and "no tasks are running" not in output
+
+        result = subprocess.run(
+            ["pgrep", "-x", STEPMANIA_EXE_NAME],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+
+        if result.returncode == 0 and result.stdout.strip():
+            return True
+
+        if result.returncode in (0, 1):
+            return False
+
+        fallback = subprocess.run(
+            ["ps", "-A", "-o", "comm="],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        return any(line.strip() == STEPMANIA_EXE_NAME for line in fallback.stdout.splitlines())
+
+    except Exception as e:
+        logger.error(f"Failed to inspect StepMania process state: {e}")
+        return False
+
+
+def open_stepmania():
+    """
+    Launch StepMania without tying the child process lifecycle to this server.
+    """
+    executable_path = get_stepmania_executable_path()
+    if not executable_path:
+        raise FileNotFoundError("StepMania executable could not be found from the cached install path")
+
+    launch_kwargs = {
+        "cwd": STEPMANIA_ROOT_DIR or os.path.dirname(executable_path),
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+    }
+
+    if sys.platform in ["win32", "cygwin"]:
+        creationflags = (
+            getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+            | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+        )
+        subprocess.Popen([executable_path], creationflags=creationflags, **launch_kwargs)
+    else:
+        subprocess.Popen([executable_path], start_new_session=True, **launch_kwargs)
+
+    logger.info(f"Launched StepMania from {executable_path}")
+
+
+def close_stepmania():
+    """
+    Stop StepMania using platform-appropriate process commands.
+    """
+    if sys.platform in ["win32", "cygwin"]:
+        result = subprocess.run(
+            ["taskkill", "/IM", STEPMANIA_EXE_NAME, "/T", "/F"],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        combined_output = " ".join(filter(None, [result.stdout.strip(), result.stderr.strip()]))
+        combined_output_lower = combined_output.lower()
+        if result.returncode != 0 and "not found" not in combined_output_lower and "no tasks are running" not in combined_output_lower:
+            raise RuntimeError(combined_output or "taskkill failed")
+        logger.info("Issued StepMania close command via taskkill")
+        return
+
+    result = subprocess.run(
+        ["pkill", "-x", STEPMANIA_EXE_NAME],
+        capture_output=True,
+        text=True,
+        check=False
+    )
+    if result.returncode not in (0, 1):
+        raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "pkill failed")
+
+    logger.info("Issued StepMania close command via pkill")
+
+
+def wait_for_stepmania_state(target_running, timeout=8.0, interval=0.25):
+    """
+    Wait until StepMania matches the desired running state.
+
+    Returns:
+        True if the target state was observed before timeout, else False
+    """
+    deadline = time.time() + timeout
+
+    while time.time() < deadline:
+        if is_stepmania_running() == target_running:
+            return True
+        time.sleep(interval)
+
+    return is_stepmania_running() == target_running
 
 
 def search_songs(song_title, song_artist):

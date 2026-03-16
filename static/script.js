@@ -6,6 +6,16 @@ let currentResults = [];
 let isSearching = false;
 let isDownloading = false;
 let currentPage = 0;
+let currentView = 'control';
+let keyboardControlsEnabled = false;
+const activeKeyboardButtons = new Map();
+let stepmaniaState = {
+    running: null,
+    available: false,
+    message: 'Waiting for server status...'
+};
+let isStepManiaActionPending = false;
+let pendingStepManiaAction = null;
 const RESULTS_PER_PAGE = 10;
 
 // Search API configuration (uses local proxy to avoid CORS issues)
@@ -16,6 +26,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeSocket();
     initializeButtons();
     initializeDDR();
+    initializeStepManiaControls();
+    initializeKeyboardControls();
 });
 
 /**
@@ -23,10 +35,10 @@ document.addEventListener('DOMContentLoaded', () => {
  */
 function initializeDDR() {
     const ddrButton = document.getElementById('ddrButton');
+    const stepmaniaButton = document.getElementById('stepmaniaButton');
     const backButton = document.getElementById('backButton');
+    const stepmaniaBackButton = document.getElementById('stepmaniaBackButton');
     const searchButton = document.getElementById('searchButton');
-    const controlPage = document.getElementById('controlPage');
-    const ddrPage = document.getElementById('ddrPage');
     const songTitle = document.getElementById('songTitle');
     const songArtist = document.getElementById('songArtist');
     const prevPageBtn = document.getElementById('prevPageBtn');
@@ -34,14 +46,21 @@ function initializeDDR() {
     
     // DDR button - show downloader
     ddrButton.addEventListener('click', () => {
-        controlPage.classList.add('hidden');
-        ddrPage.classList.remove('hidden');
+        switchToPage('ddr');
+    });
+
+    // StepMania button - show process controls
+    stepmaniaButton.addEventListener('click', () => {
+        switchToPage('stepmania');
     });
     
     // Back button - return to control page
     backButton.addEventListener('click', () => {
-        ddrPage.classList.add('hidden');
-        controlPage.classList.remove('hidden');
+        switchToPage('control');
+    });
+
+    stepmaniaBackButton.addEventListener('click', () => {
+        switchToPage('control');
     });
     
     // Check if search button should be enabled
@@ -81,6 +100,36 @@ function initializeDDR() {
             displayResults();
         }
     });
+}
+
+/**
+ * Switch between the controller, downloader, and StepMania pages
+ * @param {string} view
+ */
+function switchToPage(view) {
+    const pages = {
+        control: document.getElementById('controlPage'),
+        ddr: document.getElementById('ddrPage'),
+        stepmania: document.getElementById('stepmaniaPage')
+    };
+
+    if (!pages[view]) {
+        return;
+    }
+
+    if (view !== 'control') {
+        releaseActiveKeyboardButtons();
+    }
+
+    Object.entries(pages).forEach(([pageName, pageElement]) => {
+        pageElement.classList.toggle('hidden', pageName !== view);
+    });
+
+    currentView = view;
+
+    if (currentView === 'stepmania') {
+        requestStepManiaState();
+    }
 }
 
 /**
@@ -254,6 +303,7 @@ function initializeSocket() {
         updateConnectionStatus(true);
         connectionTime = 0;
         startConnectionTimer();
+        requestStepManiaState();
     });
 
     // Connection lost
@@ -261,6 +311,10 @@ function initializeSocket() {
         console.log('Disconnected from server');
         updateConnectionStatus(false);
         stopConnectionTimer();
+        isStepManiaActionPending = false;
+        pendingStepManiaAction = null;
+        stepmaniaState.message = 'Disconnected from server.';
+        updateStepManiaControls();
     });
     
     // Listen for download status
@@ -271,6 +325,14 @@ function initializeSocket() {
     // Listen for acknowledgments from server
     socket.on('button_response', (data) => {
         console.log('Button response:', data);
+    });
+
+    socket.on('stepmania_state', (data) => {
+        handleStepManiaState(data);
+    });
+
+    socket.on('stepmania_action_result', (data) => {
+        handleStepManiaActionResult(data);
     });
 
     // Handle server errors
@@ -506,11 +568,307 @@ function initializeButtons() {
 }
 
 /**
+ * Initialize the StepMania control page button
+ */
+function initializeStepManiaControls() {
+    const toggleButton = document.getElementById('stepmaniaToggleButton');
+    toggleButton.addEventListener('click', handleStepManiaToggle);
+    updateStepManiaControls();
+}
+
+/**
+ * Request a fresh StepMania status update from the server
+ */
+function requestStepManiaState() {
+    if (!socket || !socket.connected) {
+        updateStepManiaControls();
+        return;
+    }
+
+    socket.emit('request_stepmania_state');
+}
+
+/**
+ * Update local StepMania state from the server
+ * @param {Object} data
+ */
+function handleStepManiaState(data) {
+    stepmaniaState = {
+        running: typeof data.running === 'boolean' ? data.running : stepmaniaState.running,
+        available: typeof data.available === 'boolean' ? data.available : stepmaniaState.available,
+        message: data.message || defaultStepManiaMessage(
+            typeof data.running === 'boolean' ? data.running : stepmaniaState.running,
+            typeof data.available === 'boolean' ? data.available : stepmaniaState.available
+        )
+    };
+
+    isStepManiaActionPending = false;
+    pendingStepManiaAction = null;
+    updateStepManiaControls();
+}
+
+/**
+ * Handle StepMania action results, especially failures that should restore the button
+ * @param {Object} data
+ */
+function handleStepManiaActionResult(data) {
+    if (typeof data.running === 'boolean') {
+        stepmaniaState.running = data.running;
+    }
+
+    if (typeof data.available === 'boolean') {
+        stepmaniaState.available = data.available;
+    }
+
+    if (data.status === 'error') {
+        isStepManiaActionPending = false;
+        pendingStepManiaAction = null;
+    }
+
+    if (data.message) {
+        stepmaniaState.message = data.message;
+    }
+
+    updateStepManiaControls();
+}
+
+/**
+ * Toggle the StepMania process on the server
+ */
+function handleStepManiaToggle() {
+    if (!socket || !socket.connected || isStepManiaActionPending || typeof stepmaniaState.running !== 'boolean') {
+        return;
+    }
+
+    const action = stepmaniaState.running ? 'close' : 'open';
+
+    if (action === 'close' && !window.confirm('Close StepMania on the server?')) {
+        return;
+    }
+
+    isStepManiaActionPending = true;
+    pendingStepManiaAction = action;
+    stepmaniaState.message = action === 'close'
+        ? 'Closing StepMania on the server...'
+        : 'Opening StepMania on the server...';
+    updateStepManiaControls();
+
+    socket.emit('stepmania_action', { action: action });
+}
+
+/**
+ * Render the StepMania control button and status text
+ */
+function updateStepManiaControls() {
+    const toggleButton = document.getElementById('stepmaniaToggleButton');
+    const statusText = document.getElementById('stepmaniaStatusText');
+
+    if (!toggleButton || !statusText) {
+        return;
+    }
+
+    let buttonLabel = 'Checking StepMania...';
+    let buttonDisabled = true;
+    let statusMessage = stepmaniaState.message || 'Waiting for server status...';
+
+    if (!socket || !socket.connected) {
+        buttonLabel = stepmaniaState.running ? 'Close StepMania' : 'Open StepMania';
+        statusMessage = 'Disconnected from server.';
+    } else if (isStepManiaActionPending) {
+        buttonLabel = pendingStepManiaAction === 'close' ? 'Closing StepMania...' : 'Opening StepMania...';
+    } else if (typeof stepmaniaState.running === 'boolean') {
+        buttonLabel = stepmaniaState.running ? 'Close StepMania' : 'Open StepMania';
+        buttonDisabled = stepmaniaState.running ? false : !stepmaniaState.available;
+        statusMessage = stepmaniaState.message || defaultStepManiaMessage(stepmaniaState.running, stepmaniaState.available);
+    }
+
+    toggleButton.textContent = buttonLabel;
+    toggleButton.disabled = buttonDisabled;
+    toggleButton.classList.toggle('is-running', stepmaniaState.running === true);
+    statusText.textContent = statusMessage;
+}
+
+/**
+ * Default StepMania status text
+ * @param {boolean|null} running
+ * @param {boolean} available
+ * @returns {string}
+ */
+function defaultStepManiaMessage(running, available) {
+    if (running === true) {
+        return 'StepMania is currently running on the server.';
+    }
+
+    if (running === false && !available) {
+        return 'StepMania is not running and its executable could not be found on the server.';
+    }
+
+    if (running === false) {
+        return 'StepMania is not currently running on the server.';
+    }
+
+    return 'Waiting for server status...';
+}
+
+/**
+ * Initialize desktop-only keyboard controls for the controller page
+ */
+function initializeKeyboardControls() {
+    keyboardControlsEnabled = !isMobileBrowser();
+
+    if (!keyboardControlsEnabled) {
+        return;
+    }
+
+    document.addEventListener('keydown', handleKeyboardButtonPress);
+    document.addEventListener('keyup', handleKeyboardButtonRelease);
+    window.addEventListener('blur', releaseActiveKeyboardButtons);
+}
+
+/**
+ * Whether controller inputs should be allowed to send to the server
+ * @returns {boolean}
+ */
+function canSendControllerInput() {
+    return currentView === 'control';
+}
+
+/**
+ * Basic mobile-browser detection so desktop keyboard controls stay disabled there
+ * @returns {boolean}
+ */
+function isMobileBrowser() {
+    return Boolean(navigator.userAgentData && navigator.userAgentData.mobile) ||
+        (window.matchMedia('(max-width: 768px) and (any-pointer: coarse)').matches) ||
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+
+/**
+ * Translate supported keyboard keys into controller buttons
+ * @param {string} key
+ * @returns {string|null}
+ */
+function getButtonForKey(key) {
+    switch (key) {
+        case 'ArrowLeft':
+            return 'Left';
+        case 'ArrowDown':
+            return 'Down';
+        case 'ArrowUp':
+            return 'Up';
+        case 'ArrowRight':
+            return 'Right';
+        case 'Enter':
+        case ' ':
+        case 'Spacebar':
+            return 'A';
+        case 'Escape':
+        case 'Esc':
+        case 'Backspace':
+            return 'B';
+        default:
+            return null;
+    }
+}
+
+/**
+ * Handle controller key presses on desktop
+ * @param {KeyboardEvent} event
+ */
+function handleKeyboardButtonPress(event) {
+    if (!keyboardControlsEnabled || !canSendControllerInput()) {
+        return;
+    }
+
+    const button = getButtonForKey(event.key);
+    if (!button) {
+        return;
+    }
+
+    event.preventDefault();
+
+    if (activeKeyboardButtons.has(event.key)) {
+        return;
+    }
+
+    activeKeyboardButtons.set(event.key, button);
+
+    if (hasActiveKeyboardButton(button, event.key)) {
+        return;
+    }
+
+    sendButtonEvent(button, 'press');
+}
+
+/**
+ * Handle controller key releases on desktop
+ * @param {KeyboardEvent} event
+ */
+function handleKeyboardButtonRelease(event) {
+    if (!keyboardControlsEnabled) {
+        return;
+    }
+
+    const button = activeKeyboardButtons.get(event.key);
+    if (!button) {
+        return;
+    }
+
+    event.preventDefault();
+    activeKeyboardButtons.delete(event.key);
+
+    if (canSendControllerInput() && !hasActiveKeyboardButton(button)) {
+        sendButtonEvent(button, 'release');
+    }
+}
+
+/**
+ * Whether a controller button is already being held by another keyboard key
+ * @param {string} button
+ * @param {string|null} excludeKey
+ * @returns {boolean}
+ */
+function hasActiveKeyboardButton(button, excludeKey = null) {
+    for (const [activeKey, activeButton] of activeKeyboardButtons.entries()) {
+        if (activeKey !== excludeKey && activeButton === button) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Release any pressed keyboard buttons to avoid stuck controller state
+ */
+function releaseActiveKeyboardButtons() {
+    if (activeKeyboardButtons.size === 0) {
+        return;
+    }
+
+    const pressedButtons = Array.from(new Set(activeKeyboardButtons.values()));
+    activeKeyboardButtons.clear();
+
+    if (!socket || !socket.connected || !canSendControllerInput()) {
+        return;
+    }
+
+    pressedButtons.forEach((button) => {
+        sendButtonEvent(button, 'release');
+    });
+}
+
+/**
  * Send button event to the server
- * @param {string} button - 'A' or 'B'
+ * @param {string} button - 'A', 'B', 'Left', 'Down', 'Up', or 'Right'
  * @param {string} action - 'press' or 'release'
  */
 function sendButtonEvent(button, action) {
+    if (!canSendControllerInput()) {
+        console.log(`Ignoring ${button} ${action} while the controller page is not active`);
+        return;
+    }
+
     if (socket && socket.connected) {
         socket.emit('button_event', {
             button: button,
@@ -585,20 +943,3 @@ function updateConnectionTimeDisplay() {
         element.textContent = `${hours}h ${minutes}m`;
     }
 }
-
-// Add keyboard support for testing/desktop use
-document.addEventListener('keydown', (e) => {
-    if (e.key.toLowerCase() === 'a') {
-        sendButtonEvent('A', 'press');
-    } else if (e.key.toLowerCase() === 'b') {
-        sendButtonEvent('B', 'press');
-    }
-});
-
-document.addEventListener('keyup', (e) => {
-    if (e.key.toLowerCase() === 'a') {
-        sendButtonEvent('A', 'release');
-    } else if (e.key.toLowerCase() === 'b') {
-        sendButtonEvent('B', 'release');
-    }
-});

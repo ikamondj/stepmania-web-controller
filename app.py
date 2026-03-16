@@ -70,6 +70,8 @@ key_lock = threading.Lock()
 
 # mDNS service
 mdns_instance = None
+stepmania_state_lock = threading.Lock()
+last_stepmania_state = None
 
 
 def get_key_from_name(button_name):
@@ -210,6 +212,62 @@ def cleanup_mdns():
         mdns_instance = None
 
 
+def get_stepmania_state_payload(message=None):
+    """
+    Build the current StepMania state payload for websocket clients.
+    """
+    running = ddr_handler.is_stepmania_running()
+    available = ddr_handler.is_stepmania_available()
+
+    payload = {
+        'running': running,
+        'available': available,
+        'timestamp': time.time()
+    }
+
+    if message:
+        payload['message'] = message
+
+    return payload
+
+
+def emit_stepmania_state(message=None, to=None):
+    """
+    Emit the current StepMania state to one client or all clients.
+    """
+    global last_stepmania_state
+
+    payload = get_stepmania_state_payload(message=message)
+
+    if to:
+        socketio.emit('stepmania_state', payload, to=to)
+        return payload
+
+    with stepmania_state_lock:
+        last_stepmania_state = (payload['running'], payload['available'])
+
+    socketio.emit('stepmania_state', payload)
+    return payload
+
+
+def monitor_stepmania_state():
+    """
+    Broadcast StepMania state changes while the server is running.
+    """
+    global last_stepmania_state
+
+    while True:
+        payload = get_stepmania_state_payload()
+        snapshot = (payload['running'], payload['available'])
+
+        with stepmania_state_lock:
+            if snapshot != last_stepmania_state:
+                last_stepmania_state = snapshot
+                socketio.emit('stepmania_state', payload)
+
+        socketio.sleep(2)
+
+
 @app.route('/')
 def index():
     """
@@ -299,6 +357,7 @@ def handle_connect():
     client_ip = request.remote_addr
     logger.info(f"Client connected: {client_ip}")
     emit('response', {'data': 'Connected to WebHID Server'})
+    emit('stepmania_state', get_stepmania_state_payload())
 
 
 @socketio.on('disconnect')
@@ -360,6 +419,94 @@ def handle_ping(data):
     Handle ping messages for connection keep-alive
     """
     emit('pong', {'timestamp': time.time()})
+
+
+@socketio.on('request_stepmania_state')
+def handle_request_stepmania_state():
+    """
+    Send the current StepMania process state to the requesting client.
+    """
+    emit('stepmania_state', get_stepmania_state_payload())
+
+
+@socketio.on('stepmania_action')
+def handle_stepmania_action(data):
+    """
+    Open or close StepMania on the server.
+    """
+    data = data or {}
+    action = data.get('action', '').lower()
+    session_id = request.sid
+
+    if action not in ['open', 'close']:
+        emit('stepmania_action_result', {
+            'status': 'error',
+            'message': 'Invalid StepMania action'
+        })
+        return
+
+    current_state = get_stepmania_state_payload()
+    logger.info(f"StepMania action requested from {request.remote_addr}: {action}")
+
+    try:
+        if action == 'open':
+            if current_state['running']:
+                emit_stepmania_state(to=session_id)
+                return
+
+            if not current_state['available']:
+                emit('stepmania_action_result', {
+                    'status': 'error',
+                    'message': 'StepMania executable could not be found on the server.',
+                    'running': current_state['running'],
+                    'available': current_state['available']
+                })
+                return
+
+            ddr_handler.open_stepmania()
+            state_changed = ddr_handler.wait_for_stepmania_state(True, timeout=10.0)
+
+            if not state_changed:
+                updated_state = get_stepmania_state_payload()
+                emit('stepmania_action_result', {
+                    'status': 'error',
+                    'message': 'StepMania launch was requested, but the process did not appear in time.',
+                    'running': updated_state['running'],
+                    'available': updated_state['available']
+                })
+                return
+
+            emit_stepmania_state()
+            return
+
+        if not current_state['running']:
+            emit_stepmania_state(to=session_id)
+            return
+
+        ddr_handler.close_stepmania()
+        state_changed = ddr_handler.wait_for_stepmania_state(False, timeout=6.0)
+
+        if not state_changed:
+            updated_state = get_stepmania_state_payload()
+            emit('stepmania_action_result', {
+                'status': 'error',
+                'message': 'StepMania close was requested, but the process is still running.',
+                'running': updated_state['running'],
+                'available': updated_state['available']
+            })
+            return
+
+        emit_stepmania_state()
+
+    except Exception as e:
+        logger.error(f"StepMania action failed: {e}", exc_info=True)
+        updated_state = get_stepmania_state_payload()
+        emit('stepmania_action_result', {
+            'status': 'error',
+            'message': str(e),
+            'running': updated_state['running'],
+            'available': updated_state['available']
+        })
 
 
 @socketio.on('ddr_download')
@@ -449,6 +596,7 @@ def run_server():
     
     # Set up mDNS
     setup_mdns()
+    socketio.start_background_task(monitor_stepmania_state)
     
     try:
         # Start the server
