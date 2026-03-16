@@ -35,38 +35,6 @@ ZENIUS_HEADERS = {
 # Track active downloads
 active_downloads = {}
 
-VIDEO_FILE_EXTENSIONS = {
-    ".mp4",
-    ".m4v",
-    ".mov",
-    ".avi",
-    ".wmv",
-    ".flv",
-    ".webm",
-    ".mpg",
-    ".mpeg",
-    ".mkv",
-}
-
-
-def _is_video_filename(filename):
-    return os.path.splitext(filename)[1].lower() in VIDEO_FILE_EXTENSIONS
-
-
-def _remove_video_files(folder):
-    removed_files = []
-    for root, _, files in os.walk(folder):
-        for file_name in files:
-            if _is_video_filename(file_name):
-                file_path = os.path.join(root, file_name)
-                try:
-                    os.remove(file_path)
-                    removed_files.append(file_path)
-                except OSError as e:
-                    logger.warning(f"Failed to remove video file '{file_path}': {e}")
-
-    return removed_files
-
 
 def initialize():
     """Initialize the DDR handler by setting up StepMania directory"""
@@ -390,24 +358,9 @@ def download_and_extract(song_data, download_id=None, callback=None):
         if callback:
             callback({"status": "progress", "message": "Extracting..."})
         
-        # Extract the file, skipping any bundled video assets.
-        os.makedirs(temp_extract_folder, exist_ok=True)
+        # Extract the file
         with zipfile.ZipFile(zip_filename, "r") as zip_ref:
-            zip_members = zip_ref.infolist()
-            members_to_extract = [
-                member for member in zip_members
-                if member.is_dir() or not _is_video_filename(member.filename)
-            ]
-            skipped_video_members = [
-                member.filename for member in zip_members
-                if not member.is_dir() and _is_video_filename(member.filename)
-            ]
-            zip_ref.extractall(temp_extract_folder, members_to_extract)
-
-        if skipped_video_members:
-            logger.info(
-                f"Skipped {len(skipped_video_members)} video file(s) for '{song_name}'"
-            )
+            zip_ref.extractall(temp_extract_folder)
         
         logger.info(f"Extracted to: {temp_extract_folder}")
         
@@ -420,12 +373,6 @@ def download_and_extract(song_data, download_id=None, callback=None):
             os.makedirs(final_extract_folder, exist_ok=True)
             for item in extracted_contents:
                 shutil.move(os.path.join(temp_extract_folder, item), final_extract_folder)
-
-        removed_video_files = _remove_video_files(final_extract_folder)
-        if removed_video_files:
-            logger.info(
-                f"Removed {len(removed_video_files)} extracted video file(s) for '{song_name}'"
-            )
         
         logger.info(f"Moved to final location: {final_extract_folder}")
         
