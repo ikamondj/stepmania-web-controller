@@ -16,7 +16,16 @@ let stepmaniaState = {
 };
 let isStepManiaActionPending = false;
 let pendingStepManiaAction = null;
+let audioVolumeState = {
+    available: false,
+    volume: null,
+    message: 'Waiting for server audio status...'
+};
+let isAudioVolumeActionPending = false;
+let pendingAudioVolume = null;
 const RESULTS_PER_PAGE = 10;
+const AUDIO_VOLUME_MIN = 0;
+const AUDIO_VOLUME_MAX = 100;
 
 // Search API configuration (uses local proxy to avoid CORS issues)
 const SEARCH_API_URL = "/api/ddr-search";
@@ -129,6 +138,7 @@ function switchToPage(view) {
 
     if (currentView === 'stepmania') {
         requestStepManiaState();
+        requestAudioVolumeState();
     }
 }
 
@@ -304,6 +314,7 @@ function initializeSocket() {
         connectionTime = 0;
         startConnectionTimer();
         requestStepManiaState();
+        requestAudioVolumeState();
     });
 
     // Connection lost
@@ -314,7 +325,11 @@ function initializeSocket() {
         isStepManiaActionPending = false;
         pendingStepManiaAction = null;
         stepmaniaState.message = 'Disconnected from server.';
+        isAudioVolumeActionPending = false;
+        pendingAudioVolume = null;
+        audioVolumeState.message = 'Disconnected from server.';
         updateStepManiaControls();
+        updateAudioVolumeControls();
     });
     
     // Listen for download status
@@ -333,6 +348,14 @@ function initializeSocket() {
 
     socket.on('stepmania_action_result', (data) => {
         handleStepManiaActionResult(data);
+    });
+
+    socket.on('audio_volume_state', (data) => {
+        handleAudioVolumeState(data);
+    });
+
+    socket.on('audio_volume_result', (data) => {
+        handleAudioVolumeResult(data);
     });
 
     // Handle server errors
@@ -572,8 +595,14 @@ function initializeButtons() {
  */
 function initializeStepManiaControls() {
     const toggleButton = document.getElementById('stepmaniaToggleButton');
+    const volumeSlider = document.getElementById('audioVolumeSlider');
+
     toggleButton.addEventListener('click', handleStepManiaToggle);
+    volumeSlider.addEventListener('input', handleAudioVolumeSliderInput);
+    volumeSlider.addEventListener('change', handleAudioVolumeSliderCommit);
+
     updateStepManiaControls();
+    updateAudioVolumeControls();
 }
 
 /**
@@ -586,6 +615,18 @@ function requestStepManiaState() {
     }
 
     socket.emit('request_stepmania_state');
+}
+
+/**
+ * Request a fresh audio volume update from the server
+ */
+function requestAudioVolumeState() {
+    if (!socket || !socket.connected) {
+        updateAudioVolumeControls();
+        return;
+    }
+
+    socket.emit('request_audio_volume_state');
 }
 
 /**
@@ -633,6 +674,52 @@ function handleStepManiaActionResult(data) {
 }
 
 /**
+ * Update local audio volume state from the server
+ * @param {Object} data
+ */
+function handleAudioVolumeState(data) {
+    audioVolumeState = {
+        available: typeof data.available === 'boolean' ? data.available : audioVolumeState.available,
+        volume: typeof data.volume === 'number'
+            ? clampAudioVolume(data.volume)
+            : (data.available === false ? null : audioVolumeState.volume),
+        message: data.message || defaultAudioVolumeMessage(
+            typeof data.available === 'boolean' ? data.available : audioVolumeState.available,
+            typeof data.volume === 'number' ? clampAudioVolume(data.volume) : audioVolumeState.volume
+        )
+    };
+
+    isAudioVolumeActionPending = false;
+    pendingAudioVolume = null;
+    updateAudioVolumeControls();
+}
+
+/**
+ * Handle audio volume action results, especially failures that should restore the slider
+ * @param {Object} data
+ */
+function handleAudioVolumeResult(data) {
+    if (typeof data.available === 'boolean') {
+        audioVolumeState.available = data.available;
+    }
+
+    if (typeof data.volume === 'number') {
+        audioVolumeState.volume = clampAudioVolume(data.volume);
+    } else if (data.available === false) {
+        audioVolumeState.volume = null;
+    }
+
+    isAudioVolumeActionPending = false;
+    pendingAudioVolume = null;
+
+    if (data.message) {
+        audioVolumeState.message = data.message;
+    }
+
+    updateAudioVolumeControls();
+}
+
+/**
  * Toggle the StepMania process on the server
  */
 function handleStepManiaToggle() {
@@ -654,6 +741,45 @@ function handleStepManiaToggle() {
     updateStepManiaControls();
 
     socket.emit('stepmania_action', { action: action });
+}
+
+/**
+ * Reflect the current slider position while the user drags it
+ * @param {Event} event
+ */
+function handleAudioVolumeSliderInput(event) {
+    const selectedVolume = clampAudioVolume(event.target.value);
+    const valueLabel = document.getElementById('audioVolumeValue');
+
+    if (valueLabel) {
+        valueLabel.textContent = `${selectedVolume}%`;
+    }
+}
+
+/**
+ * Commit a new server audio volume once the user releases the slider
+ * @param {Event} event
+ */
+function handleAudioVolumeSliderCommit(event) {
+    if (!socket || !socket.connected || isAudioVolumeActionPending || !audioVolumeState.available) {
+        updateAudioVolumeControls();
+        return;
+    }
+
+    const selectedVolume = clampAudioVolume(event.target.value);
+
+    if (selectedVolume === audioVolumeState.volume) {
+        updateAudioVolumeControls();
+        return;
+    }
+
+    isAudioVolumeActionPending = true;
+    pendingAudioVolume = selectedVolume;
+    audioVolumeState.volume = selectedVolume;
+    audioVolumeState.message = `Setting system audio output to ${selectedVolume}%...`;
+    updateAudioVolumeControls();
+
+    socket.emit('set_audio_volume', { volume: selectedVolume });
 }
 
 /**
@@ -689,6 +815,51 @@ function updateStepManiaControls() {
 }
 
 /**
+ * Render the audio volume slider and status text
+ */
+function updateAudioVolumeControls() {
+    const volumeSlider = document.getElementById('audioVolumeSlider');
+    const volumeValue = document.getElementById('audioVolumeValue');
+    const statusText = document.getElementById('audioVolumeStatusText');
+
+    if (!volumeSlider || !volumeValue || !statusText) {
+        return;
+    }
+
+    let sliderValue = typeof audioVolumeState.volume === 'number'
+        ? clampAudioVolume(audioVolumeState.volume)
+        : AUDIO_VOLUME_MIN;
+    let hasKnownVolume = typeof audioVolumeState.volume === 'number';
+    let sliderDisabled = true;
+    let statusMessage = audioVolumeState.message || 'Waiting for server audio status...';
+
+    if (!socket || !socket.connected) {
+        statusMessage = 'Disconnected from server.';
+    } else if (isAudioVolumeActionPending) {
+        sliderValue = typeof pendingAudioVolume === 'number'
+            ? clampAudioVolume(pendingAudioVolume)
+            : sliderValue;
+        hasKnownVolume = typeof pendingAudioVolume === 'number' || hasKnownVolume;
+        statusMessage = audioVolumeState.message || `Setting system audio output to ${sliderValue}%...`;
+    } else if (audioVolumeState.available) {
+        sliderDisabled = false;
+        hasKnownVolume = typeof audioVolumeState.volume === 'number';
+        statusMessage = audioVolumeState.message || defaultAudioVolumeMessage(audioVolumeState.available, sliderValue);
+    } else {
+        sliderValue = typeof audioVolumeState.volume === 'number'
+            ? clampAudioVolume(audioVolumeState.volume)
+            : AUDIO_VOLUME_MIN;
+        hasKnownVolume = typeof audioVolumeState.volume === 'number';
+        statusMessage = audioVolumeState.message || defaultAudioVolumeMessage(false, null);
+    }
+
+    volumeSlider.disabled = sliderDisabled;
+    volumeSlider.value = String(sliderValue);
+    volumeValue.textContent = hasKnownVolume ? `${sliderValue}%` : '--%';
+    statusText.textContent = statusMessage;
+}
+
+/**
  * Default StepMania status text
  * @param {boolean|null} running
  * @param {boolean} available
@@ -708,6 +879,39 @@ function defaultStepManiaMessage(running, available) {
     }
 
     return 'Waiting for server status...';
+}
+
+/**
+ * Default audio volume status text
+ * @param {boolean} available
+ * @param {number|null} volume
+ * @returns {string}
+ */
+function defaultAudioVolumeMessage(available, volume) {
+    if (available && typeof volume === 'number') {
+        return `System audio output is set to ${clampAudioVolume(volume)}%.`;
+    }
+
+    if (!available) {
+        return 'Audio volume control is unavailable on the server.';
+    }
+
+    return 'Waiting for server audio status...';
+}
+
+/**
+ * Clamp slider values to the supported audio range
+ * @param {number|string} value
+ * @returns {number}
+ */
+function clampAudioVolume(value) {
+    const numericValue = Number.parseInt(value, 10);
+
+    if (Number.isNaN(numericValue)) {
+        return AUDIO_VOLUME_MIN;
+    }
+
+    return Math.min(AUDIO_VOLUME_MAX, Math.max(AUDIO_VOLUME_MIN, numericValue));
 }
 
 /**

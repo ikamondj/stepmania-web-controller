@@ -34,6 +34,8 @@ ZENIUS_HEADERS = {
 
 # Track active downloads
 active_downloads = {}
+AUDIO_VOLUME_MIN = 0
+AUDIO_VOLUME_MAX = 100
 
 
 def initialize():
@@ -243,6 +245,68 @@ def wait_for_stepmania_state(target_running, timeout=8.0, interval=0.25):
         time.sleep(interval)
 
     return is_stepmania_running() == target_running
+
+
+def _run_pactl_command(arguments):
+    """
+    Run a pactl command and return stdout.
+    """
+    if not sys.platform.startswith("linux"):
+        raise NotImplementedError("Audio volume control via pactl is only supported on Linux servers.")
+
+    pactl_path = shutil.which("pactl")
+    if not pactl_path:
+        raise FileNotFoundError("pactl is not installed on the server.")
+
+    try:
+        result = subprocess.run(
+            [pactl_path, *arguments],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5
+        )
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError("pactl timed out while communicating with the audio server.") from e
+
+    if result.returncode != 0:
+        combined_output = " ".join(filter(None, [result.stdout.strip(), result.stderr.strip()]))
+        raise RuntimeError(combined_output or f"pactl {' '.join(arguments)} failed")
+
+    return result.stdout.strip()
+
+
+def get_audio_volume():
+    """
+    Read the current default sink volume percentage from PulseAudio.
+    """
+    output = _run_pactl_command(["get-sink-volume", "@DEFAULT_SINK@"])
+    match = re.search(r"/\s*(\d{1,3})%", output)
+
+    if not match:
+        match = re.search(r"(\d{1,3})%", output)
+
+    if not match:
+        raise RuntimeError("Could not parse the current audio volume from pactl output.")
+
+    volume = int(match.group(1))
+    return max(AUDIO_VOLUME_MIN, min(AUDIO_VOLUME_MAX, volume))
+
+
+def set_audio_volume(volume_percent):
+    """
+    Set the default sink volume percentage via PulseAudio.
+    """
+    try:
+        normalized_volume = int(volume_percent)
+    except (TypeError, ValueError) as e:
+        raise ValueError("Audio volume must be an integer percentage.") from e
+
+    if normalized_volume < AUDIO_VOLUME_MIN or normalized_volume > AUDIO_VOLUME_MAX:
+        raise ValueError(f"Audio volume must be between {AUDIO_VOLUME_MIN} and {AUDIO_VOLUME_MAX}.")
+
+    _run_pactl_command(["set-sink-volume", "@DEFAULT_SINK@", f"{normalized_volume}%"])
+    return get_audio_volume()
 
 
 def search_songs(song_title, song_artist):

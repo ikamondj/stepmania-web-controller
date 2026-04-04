@@ -132,14 +132,43 @@
 
             <div class="stepmania-container">
                 <div class="stepmania-panel">
-                    <h2>Manage StepMania</h2>
-                    <p id="stepmaniaStatusText" class="stepmania-status-text">Waiting for server status...</p>
-                    <button id="stepmaniaToggleButton" class="stepmania-toggle-button" disabled>
-                        Checking StepMania...
-                    </button>
-                    <p class="stepmania-hint">
-                        This page reflects the server's current StepMania process state.
-                    </p>
+                    <div class="stepmania-section">
+                        <h2>Manage StepMania</h2>
+                        <p id="stepmaniaStatusText" class="stepmania-status-text">Waiting for server status...</p>
+                        <button id="stepmaniaToggleButton" class="stepmania-toggle-button" disabled>
+                            Checking StepMania...
+                        </button>
+                        <p class="stepmania-hint">
+                            This page reflects the server's current StepMania process state.
+                        </p>
+                    </div>
+
+                    <div class="stepmania-section stepmania-section-divider">
+                        <div class="audio-volume-header">
+                            <h2>System Audio</h2>
+                            <span id="audioVolumeValue" class="audio-volume-value">--%</span>
+                        </div>
+                        <p id="audioVolumeStatusText" class="stepmania-status-text audio-volume-status-text">
+                            Waiting for server audio status...
+                        </p>
+                        <input
+                            type="range"
+                            id="audioVolumeSlider"
+                            class="audio-volume-slider"
+                            min="0"
+                            max="100"
+                            step="1"
+                            value="50"
+                            disabled
+                        >
+                        <div class="audio-volume-scale">
+                            <span>0%</span>
+                            <span>100%</span>
+                        </div>
+                        <p class="stepmania-hint">
+                            Adjusts the Raspberry Pi output volume through PulseAudio on the server.
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>

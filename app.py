@@ -250,6 +250,43 @@ def emit_stepmania_state(message=None, to=None):
     return payload
 
 
+def get_audio_volume_payload(message=None):
+    """
+    Build the current server audio volume payload for websocket clients.
+    """
+    try:
+        volume = ddr_handler.get_audio_volume()
+        payload = {
+            'available': True,
+            'volume': volume,
+            'timestamp': time.time(),
+            'message': message or f'System audio output is set to {volume}%.'
+        }
+    except Exception as e:
+        payload = {
+            'available': False,
+            'volume': None,
+            'timestamp': time.time(),
+            'message': str(e)
+        }
+
+    return payload
+
+
+def emit_audio_volume_state(message=None, to=None):
+    """
+    Emit the current server audio volume state to one client or all clients.
+    """
+    payload = get_audio_volume_payload(message=message)
+
+    if to:
+        socketio.emit('audio_volume_state', payload, to=to)
+        return payload
+
+    socketio.emit('audio_volume_state', payload)
+    return payload
+
+
 def monitor_stepmania_state():
     """
     Broadcast StepMania state changes while the server is running.
@@ -358,6 +395,7 @@ def handle_connect():
     logger.info(f"Client connected: {client_ip}")
     emit('response', {'data': 'Connected to WebHID Server'})
     emit('stepmania_state', get_stepmania_state_payload())
+    emit('audio_volume_state', get_audio_volume_payload())
 
 
 @socketio.on('disconnect')
@@ -427,6 +465,14 @@ def handle_request_stepmania_state():
     Send the current StepMania process state to the requesting client.
     """
     emit('stepmania_state', get_stepmania_state_payload())
+
+
+@socketio.on('request_audio_volume_state')
+def handle_request_audio_volume_state():
+    """
+    Send the current server audio volume state to the requesting client.
+    """
+    emit('audio_volume_state', get_audio_volume_payload())
 
 
 @socketio.on('stepmania_action')
@@ -507,6 +553,46 @@ def handle_stepmania_action(data):
             'running': updated_state['running'],
             'available': updated_state['available']
         })
+
+
+@socketio.on('set_audio_volume')
+def handle_set_audio_volume(data):
+    """
+    Set the server audio volume via PulseAudio.
+    """
+    data = data or {}
+    session_id = request.sid
+
+    try:
+        volume = int(data.get('volume'))
+    except (TypeError, ValueError):
+        payload = get_audio_volume_payload()
+        payload.update({
+            'status': 'error',
+            'message': 'Invalid audio volume percentage.'
+        })
+        emit('audio_volume_result', {
+            **payload
+        })
+        return
+
+    logger.info(f"Audio volume change requested from {request.remote_addr}: {volume}%")
+
+    try:
+        updated_volume = ddr_handler.set_audio_volume(volume)
+        emit_audio_volume_state(
+            message=f'System audio output is set to {updated_volume}%.'
+        )
+    except Exception as e:
+        logger.error(f"Audio volume change failed: {e}", exc_info=True)
+        payload = get_audio_volume_payload()
+        payload.update({
+            'status': 'error',
+            'message': str(e)
+        })
+        emit('audio_volume_result', {
+            **payload
+        }, to=session_id)
 
 
 @socketio.on('ddr_download')
