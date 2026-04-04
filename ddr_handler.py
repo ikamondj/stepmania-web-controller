@@ -15,6 +15,11 @@ import threading
 import logging
 import time
 
+try:
+    import pwd
+except ImportError:
+    pwd = None
+
 logger = logging.getLogger(__name__)
 
 # Configuration
@@ -36,6 +41,7 @@ ZENIUS_HEADERS = {
 active_downloads = {}
 AUDIO_VOLUME_MIN = 0
 AUDIO_VOLUME_MAX = 100
+DEFAULT_AUDIO_SESSION_USER = os.environ.get("WEBCONTROLLER_AUDIO_USER", "pi").strip() or "pi"
 
 
 def initialize():
@@ -258,22 +264,145 @@ def _run_pactl_command(arguments):
     if not pactl_path:
         raise FileNotFoundError("pactl is not installed on the server.")
 
-    try:
-        result = subprocess.run(
-            [pactl_path, *arguments],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=5
-        )
-    except subprocess.TimeoutExpired as e:
-        raise RuntimeError("pactl timed out while communicating with the audio server.") from e
+    last_error = None
 
-    if result.returncode != 0:
+    for invocation in _build_pactl_invocations(pactl_path, arguments):
+        try:
+            result = subprocess.run(
+                invocation["command"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=5,
+                env=invocation["env"],
+                preexec_fn=invocation["preexec_fn"]
+            )
+        except subprocess.TimeoutExpired as e:
+            last_error = RuntimeError("pactl timed out while communicating with the audio server.")
+            logger.warning(f"pactl timed out using {invocation['description']}")
+            continue
+        except Exception as e:
+            last_error = RuntimeError(str(e))
+            logger.warning(f"pactl invocation failed using {invocation['description']}: {e}")
+            continue
+
+        if result.returncode == 0:
+            return result.stdout.strip()
+
         combined_output = " ".join(filter(None, [result.stdout.strip(), result.stderr.strip()]))
-        raise RuntimeError(combined_output or f"pactl {' '.join(arguments)} failed")
+        last_error = RuntimeError(combined_output or f"pactl {' '.join(arguments)} failed")
+        logger.warning(f"pactl failed using {invocation['description']}: {last_error}")
 
-    return result.stdout.strip()
+    if last_error:
+        raise last_error
+
+    raise RuntimeError("Unable to run pactl for audio volume control.")
+
+
+def _build_pactl_invocations(pactl_path, arguments):
+    """
+    Build candidate pactl invocations for the current user and the configured audio session user.
+    """
+    invocations = []
+    current_env = os.environ.copy()
+    invocations.append({
+        "command": [pactl_path, *arguments],
+        "description": "the current process environment",
+        "env": current_env,
+        "preexec_fn": None
+    })
+
+    target_user = _get_audio_session_user()
+    if target_user is None:
+        return invocations
+
+    target_runtime_dir = f"/run/user/{target_user.pw_uid}"
+    target_socket = os.path.join(target_runtime_dir, "pulse", "native")
+    env_path = shutil.which("env") or "env"
+    target_env = current_env.copy()
+    target_env.update({
+        "HOME": target_user.pw_dir,
+        "LOGNAME": target_user.pw_name,
+        "USER": target_user.pw_name,
+        "XDG_RUNTIME_DIR": target_runtime_dir,
+        "PULSE_RUNTIME_PATH": os.path.join(target_runtime_dir, "pulse"),
+        "PULSE_SERVER": f"unix:{target_socket}"
+    })
+
+    invocations.append({
+        "command": [pactl_path, *arguments],
+        "description": f"{target_user.pw_name}'s PulseAudio runtime",
+        "env": target_env,
+        "preexec_fn": None
+    })
+
+    if os.geteuid() == 0 and os.geteuid() != target_user.pw_uid:
+        runuser_path = shutil.which("runuser")
+        sudo_path = shutil.which("sudo")
+
+        if runuser_path:
+            invocations.append({
+                "command": [
+                    runuser_path,
+                    "-u",
+                    target_user.pw_name,
+                    "--",
+                    env_path,
+                    f"HOME={target_user.pw_dir}",
+                    f"LOGNAME={target_user.pw_name}",
+                    f"USER={target_user.pw_name}",
+                    f"XDG_RUNTIME_DIR={target_runtime_dir}",
+                    f"PULSE_RUNTIME_PATH={os.path.join(target_runtime_dir, 'pulse')}",
+                    f"PULSE_SERVER=unix:{target_socket}",
+                    pactl_path,
+                    *arguments
+                ],
+                "description": f"{target_user.pw_name}'s PulseAudio runtime via runuser",
+                "env": current_env,
+                "preexec_fn": None
+            })
+        elif sudo_path:
+            invocations.append({
+                "command": [
+                    sudo_path,
+                    "-n",
+                    "-u",
+                    target_user.pw_name,
+                    env_path,
+                    f"HOME={target_user.pw_dir}",
+                    f"LOGNAME={target_user.pw_name}",
+                    f"USER={target_user.pw_name}",
+                    f"XDG_RUNTIME_DIR={target_runtime_dir}",
+                    f"PULSE_RUNTIME_PATH={os.path.join(target_runtime_dir, 'pulse')}",
+                    f"PULSE_SERVER=unix:{target_socket}",
+                    pactl_path,
+                    *arguments
+                ],
+                "description": f"{target_user.pw_name}'s PulseAudio runtime via sudo",
+                "env": current_env,
+                "preexec_fn": None
+            })
+
+    return invocations
+
+
+def _get_audio_session_user():
+    """
+    Resolve the user that owns the interactive audio session.
+    """
+    if pwd is None:
+        return None
+
+    for username in [DEFAULT_AUDIO_SESSION_USER, os.environ.get("SUDO_USER"), os.environ.get("USER")]:
+        if not username:
+            continue
+
+        try:
+            return pwd.getpwnam(username)
+        except KeyError:
+            continue
+
+    return None
 
 
 def get_audio_volume():
