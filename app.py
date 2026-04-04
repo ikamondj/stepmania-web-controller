@@ -32,6 +32,7 @@ elif IS_LINUX:
         UINPUT_AVAILABLE = True
         device = uinput.Device([
             uinput.KEY_A, uinput.KEY_B,
+            uinput.KEY_ENTER, uinput.KEY_ESC,
             uinput.KEY_LEFT, uinput.KEY_DOWN, uinput.KEY_UP, uinput.KEY_RIGHT
         ])
     except ImportError:
@@ -74,6 +75,71 @@ stepmania_state_lock = threading.Lock()
 last_stepmania_state = None
 
 
+def get_configured_key_name(button_name):
+    """
+    Resolve the configured key name for a controller button.
+    """
+    key_map = {
+        'A': BUTTON_A_KEY,
+        'B': BUTTON_B_KEY,
+        'LEFT': BUTTON_LEFT_KEY,
+        'DOWN': BUTTON_DOWN_KEY,
+        'UP': BUTTON_UP_KEY,
+        'RIGHT': BUTTON_RIGHT_KEY,
+    }
+    return key_map.get(button_name.upper(), None)
+
+
+def get_uinput_key_from_config(key_name):
+    """
+    Map a configured key name to a uinput key constant.
+    """
+    if not isinstance(key_name, str):
+        return None
+
+    normalized_key = key_name.strip().lower()
+    special_key_map = {
+        'enter': uinput.KEY_ENTER,
+        'return': uinput.KEY_ENTER,
+        'escape': uinput.KEY_ESC,
+        'esc': uinput.KEY_ESC,
+        'left': uinput.KEY_LEFT,
+        'down': uinput.KEY_DOWN,
+        'up': uinput.KEY_UP,
+        'right': uinput.KEY_RIGHT,
+    }
+
+    if normalized_key in special_key_map:
+        return special_key_map[normalized_key]
+
+    if len(normalized_key) == 1 and normalized_key.isalpha():
+        return getattr(uinput, f"KEY_{normalized_key.upper()}", None)
+
+    return None
+
+
+def get_pynput_key_from_config(key_name):
+    """
+    Map a configured key name to a pynput key object or character.
+    """
+    if not isinstance(key_name, str):
+        return key_name
+
+    normalized_key = key_name.strip().lower()
+    special_key_map = {
+        'enter': Key.enter,
+        'return': Key.enter,
+        'escape': Key.esc,
+        'esc': Key.esc,
+        'left': Key.left,
+        'down': Key.down,
+        'up': Key.up,
+        'right': Key.right,
+    }
+
+    return special_key_map.get(normalized_key, normalized_key)
+
+
 def get_key_from_name(button_name):
     """
     Get the key object from button name (works for both pynput and uinput)
@@ -85,29 +151,15 @@ def get_key_from_name(button_name):
         Key object or uinput key constant
     """
     button_name = button_name.upper()
-    
+    configured_key_name = get_configured_key_name(button_name)
+
+    if configured_key_name is None:
+        return None
+
     if IS_LINUX and UINPUT_AVAILABLE:
-        # Map to uinput key constants
-        key_map = {
-            'A': uinput.KEY_A,
-            'B': uinput.KEY_B,
-            'LEFT': uinput.KEY_LEFT,
-            'DOWN': uinput.KEY_DOWN,
-            'UP': uinput.KEY_UP,
-            'RIGHT': uinput.KEY_RIGHT,
-        }
-    else:
-        # Map to pynput keys
-        key_map = {
-            'A': BUTTON_A_KEY,
-            'B': BUTTON_B_KEY,
-            'LEFT': Key.left if BUTTON_LEFT_KEY == 'left' else BUTTON_LEFT_KEY,
-            'DOWN': Key.down if BUTTON_DOWN_KEY == 'down' else BUTTON_DOWN_KEY,
-            'UP': Key.up if BUTTON_UP_KEY == 'up' else BUTTON_UP_KEY,
-            'RIGHT': Key.right if BUTTON_RIGHT_KEY == 'right' else BUTTON_RIGHT_KEY,
-        }
-    
-    return key_map.get(button_name, None)
+        return get_uinput_key_from_config(configured_key_name)
+
+    return get_pynput_key_from_config(configured_key_name)
 
 
 def press_button(button_name):
@@ -117,6 +169,7 @@ def press_button(button_name):
     Args:
         button_name: 'A', 'B', 'Left', 'Down', 'Up', or 'Right'
     """
+    button_name = button_name.upper()
     key = get_key_from_name(button_name)
     if key is None:
         logger.warning(f"Invalid button name: {button_name}")
@@ -124,13 +177,15 @@ def press_button(button_name):
     
     with key_lock:
         try:
+            key_state = (button_name, key)
+            if key_state in active_keys:
+                return
+
             if IS_LINUX and UINPUT_AVAILABLE:
-                device.emit_click(key)
-                # For sustained press, emit key down event
-                device.emit((uinput.EV_KEY, key, 1))
+                device.emit(key, 1)
             else:
                 keyboard.press(key)
-            active_keys.add((button_name, key))
+            active_keys.add(key_state)
             logger.info(f"Button {button_name} pressed")
         except Exception as e:
             logger.error(f"Error pressing button {button_name}: {e}")
@@ -143,6 +198,7 @@ def release_button(button_name):
     Args:
         button_name: 'A', 'B', 'Left', 'Down', 'Up', or 'Right'
     """
+    button_name = button_name.upper()
     key = get_key_from_name(button_name)
     if key is None:
         logger.warning(f"Invalid button name: {button_name}")
@@ -150,12 +206,15 @@ def release_button(button_name):
     
     with key_lock:
         try:
+            key_state = (button_name, key)
+            if key_state not in active_keys:
+                return
+
             if IS_LINUX and UINPUT_AVAILABLE:
-                # Emit key up event
-                device.emit((uinput.EV_KEY, key, 0))
+                device.emit(key, 0)
             else:
                 keyboard.release(key)
-            active_keys.discard((button_name, key))
+            active_keys.discard(key_state)
             logger.info(f"Button {button_name} released")
         except Exception as e:
             logger.error(f"Error releasing button {button_name}: {e}")
@@ -646,7 +705,7 @@ def release_all_buttons():
         for button_name, key in list(active_keys):
             try:
                 if IS_LINUX and UINPUT_AVAILABLE:
-                    device.emit((uinput.EV_KEY, key, 0))
+                    device.emit(key, 0)
                 else:
                     keyboard.release(key)
                 logger.info(f"Released button {button_name} during cleanup")

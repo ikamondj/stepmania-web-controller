@@ -28,8 +28,8 @@ MDNS_DOMAIN = "local"
 MDNS_FULL_NAME = f"{MDNS_NAME}.{MDNS_DOMAIN}"
 
 # Virtual button configuration
-BUTTON_A_KEY = "a"  # Key to press/release for button A
-BUTTON_B_KEY = "b"  # Key to press/release for button B
+BUTTON_A_KEY = "enter"  # Key to press/release for button A
+BUTTON_B_KEY = "escape"  # Key to press/release for button B
 BUTTON_LEFT_KEY = "left"  # Directional: Left
 BUTTON_DOWN_KEY = "down"  # Directional: Down
 BUTTON_UP_KEY = "up"  # Directional: Up
